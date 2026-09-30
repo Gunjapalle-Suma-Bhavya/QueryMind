@@ -1,11 +1,12 @@
 # QueryMind: Enterprise Natural Language to SQL with Ambiguity Clarification Engine & Classification Registry
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Gunjapalle--Suma--Bhavya%2FQueryMind-181717.svg?logo=github)](https://github.com/Gunjapalle-Suma-Bhavya/QueryMind)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com)
 [![React 18](https://img.shields.io/badge/frontend-React%2018%20%2B%20Tailwind-61dafb.svg)](https://react.dev)
 [![SQLite](https://img.shields.io/badge/database-SQLite%20Sandbox-003B57.svg)](https://sqlite.org)
-[![Tests Passing](https://img.shields.io/badge/tests-8%20passed%20%2F%20100%25-brightgreen.svg)]()
-[![Benchmark](https://img.shields.io/badge/benchmark-50%20queries%20%7C%20100%25%20accuracy-success.svg)]()
+[![Tests Passing](https://img.shields.io/badge/tests-8%20passed%20%2F%20100%25-brightgreen.svg)](#automated-verification--test-suite)
+[![Benchmark](https://img.shields.io/badge/benchmark-50%20queries%20%7C%20100%25%20accuracy-success.svg)](#the-50-query-benchmark--failure-suite)
 
 > **QueryMind** is a production-ready, full-stack enterprise Natural Language to SQL system designed to solve the critical problem of **semantic ambiguity** in text-to-SQL generation. While standard LLM text-to-SQL solutions generate syntactically valid queries that lead to catastrophic business errors, QueryMind uses a **Classification Rules Registry** and interactive **Clarification Engine** to enforce certified accounting definitions and provide verified executive answers.
 
@@ -16,10 +17,13 @@
 2. [The Core Problem: How Systems Break Without a Classification Table](#the-core-problem-how-systems-break-without-a-classification-table)
 3. [The 50-Query Benchmark & Failure Suite](#the-50-query-benchmark--failure-suite)
 4. [System Architecture & Data Flow](#system-architecture--data-flow)
-5. [Database Schema & Enterprise Classification Table](#database-schema--enterprise-classification-table)
-6. [Interactive User Experience (Hiding SQL from Primary View)](#interactive-user-experience-hiding-sql-from-primary-view)
-7. [Quickstart & Deployment Guide](#quickstart--deployment-guide)
-8. [Automated Verification & Test Suite](#automated-verification--test-suite)
+5. [Directory & File Structure](#directory--file-structure)
+6. [Database Schema & Enterprise Classification Table](#database-schema--enterprise-classification-table)
+7. [Interactive User Experience (Hiding SQL from Primary View)](#interactive-user-experience-hiding-sql-from-primary-view)
+8. [Comprehensive Architectural Guide (PDF)](#comprehensive-architectural-guide-pdf)
+9. [Quickstart & Deployment Guide](#quickstart--deployment-guide)
+10. [Automated Verification & Test Suite](#automated-verification--test-suite)
+11. [REST API Reference](#rest-api-reference)
 
 ---
 
@@ -166,6 +170,63 @@ sequenceDiagram
 
 ---
 
+## Directory & File Structure
+
+```text
+QueryMind/
+├── run.py                                     # Production launcher: runs FastAPI + serves React SPA on 1 port
+├── start.sh                                   # Turnkey startup script (creates venv, builds frontend, launches app)
+├── Dockerfile                                 # Multi-stage production container build
+├── docker-compose.yml                         # Container deployment specification
+├── env.config.example                         # Safe configuration template (OpenAI, Gemini, Base URL)
+├── .env.example                               # Safe environment variable template
+├── QueryMind_Project_Comprehensive_Guide.pdf  # 11-page architectural & project defense guide
+├── QueryMind_Project_Comprehensive_Guide.tex  # LaTeX source for architectural guide
+├── README.md                                  # Repository documentation & failure analysis
+│
+├── backend/                                   # FastAPI Backend Application
+│   ├── main.py                                # API endpoints (/api/query, /api/config, /api/benchmark)
+│   ├── requirements.txt                       # Python dependencies (fastapi, uvicorn, pydantic, etc.)
+│   ├── database/
+│   │   ├── db_manager.py                      # SQLite connection pool, query execution & guardrails
+│   │   ├── user_db_loader.py                  # Ingests and adapts test_db-master datasets
+│   │   ├── schema.sql                         # Core relational schema & metric_classification_rules table
+│   │   └── seed_classification_rules.py       # Certified enterprise business rules registry seed
+│   ├── engine/
+│   │   ├── ambiguity_detector.py              # NLP ambiguity detector & scoring
+│   │   ├── clarification_engine.py            # Clarification engine & alternative metric generator
+│   │   ├── sql_generator.py                   # Multi-provider SQL engine (Gemini, OpenAI, Offline)
+│   │   └── nl_synthesizer.py                  # Conversational executive summary generator
+│   ├── benchmark/
+│   │   ├── benchmark_queries.json             # 50 curated business benchmark queries
+│   │   ├── benchmark_runner.py                # Automated 50-query baseline vs guided evaluator
+│   │   └── latest_results.json                # Persisted benchmark execution statistics
+│   └── tests/
+│       └── test_system.py                     # 8 automated unit & integration tests
+│
+├── frontend/                                  # React 18 + Tailwind CSS SPA
+│   ├── index.html                             # Single page HTML entrypoint
+│   ├── vite.config.js                         # Vite build configuration with API reverse proxy
+│   ├── package.json                           # Frontend dependencies (lucide-react, tailwindcss)
+│   ├── dist/                                  # Pre-compiled static production assets
+│   └── src/
+│       ├── App.jsx                            # Main layout, navigation tabs & status banner
+│       └── components/
+│           ├── ChatAssistant.jsx              # Executive query UI with hidden SQL & re-ranking pills
+│           ├── BenchmarkLab.jsx               # 50-Query failure benchmark evaluation dashboard
+│           ├── ClassificationRegistry.jsx     # Enterprise rules registry explorer
+│           ├── FailureArchitecture.jsx        # Failure modes deep-dive documentation
+│           └── ApiKeyModal.jsx                # LLM configuration dialog (OpenAI Base URL, Gemini)
+│
+└── test_db-master/                            # User-provided enterprise dataset
+    ├── sakila/
+    │   ├── sakila-mv-data.sql                 # 16,049 payments, 16,044 rentals, 599 customers
+    │   └── sakila-mv-schema.sql               # Relational schema definition
+    └── load_departments.dump                 # 9 enterprise departments & manager mappings
+```
+
+---
+
 ## Database Schema & Enterprise Classification Table
 
 The system operates on an enterprise e-commerce relational schema:
@@ -207,56 +268,95 @@ As required by enterprise usability standards:
 
 ---
 
-## Quickstart & Deployment Guide
+## Comprehensive Architectural Guide (PDF)
 
-### Option 1: Docker (Single Command)
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/sql_project.git
-cd sql_project
+The repository includes a comprehensive 11-page publication-grade PDF guide:  
+📄 **[`QueryMind_Project_Comprehensive_Guide.pdf`](./QueryMind_Project_Comprehensive_Guide.pdf)**
 
-# Launch with Docker Compose
-docker-compose up --build
-```
-Open your browser at **`http://localhost:8000`**.
+It includes:
+- **Executive Summary & Problem Statement**: Mathematical and business breakdown of text-to-SQL semantic failure.
+- **Full Architecture Specification**: End-to-end data pipeline from user input to LLM prompt injection and relational execution.
+- **Classification Rules Registry Specification**: Schema and certified rule definitions.
+- **50-Query Failure Benchmark Analysis**: Category-by-category breakdown of the 84% accuracy improvement.
+- **Interview & Project Defense Guide**: Concrete answers to common engineering questions (e.g. *"Why hide SQL?"*, *"How does QueryMind support AI Credit relay platforms?"*, *"What happens if external LLM APIs fail?"*).
 
 ---
 
-### Option 2: Local Setup (Recommended)
+## Quickstart & Deployment Guide
+
+### Option 1: Turnkey Shell Startup (Fastest)
+
+Run the included startup script, which automatically configures the Python virtual environment, verifies dependencies, builds the frontend, and launches the server:
+
+```bash
+git clone https://github.com/Gunjapalle-Suma-Bhavya/QueryMind.git
+cd QueryMind
+./start.sh
+```
+Open **`http://localhost:8000`** in your browser!
+
+---
+
+### Option 2: Step-by-Step Manual Setup
 
 #### Prerequisites:
 - Python 3.8+
 - Node.js 18+ and npm
 
-#### 1. Configuration & API Keys (3 Ways):
+#### 1. Backend Setup:
+```bash
+python3 -m venv backend/venv
+source backend/venv/bin/activate
+pip install -r backend/requirements.txt
+```
 
-QueryMind supports Google Gemini (`gemini-1.5-flash`), OpenAI (`gpt-4o-mini`), and a built-in offline Semantic Engine:
+#### 2. Frontend Build:
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
 
-1. **In the Web UI (Easiest)**:
-   Launch the app and click the **"API Keys & Engine"** button in the top navigation bar. Paste your Google Gemini or OpenAI key, test the connection live, and save.
+#### 3. Configure API Keys (3 Flexible Ways):
+1. **Directly in the Web UI (Easiest)**:
+   Launch the app and click **"API Keys & Engine"** in the top navigation bar. Paste your Gemini or OpenAI / AI Credits key and test live.
 2. **In `env.config` (Visible Config File)**:
-   Open `env.config` in your project root with any text editor and paste your keys:
+   Create `env.config` from the template:
+   ```bash
+   cp env.config.example env.config
+   ```
+   Open `env.config` and add your keys:
    ```env
+   # Google Gemini API Key
    GEMINI_API_KEY=your_gemini_api_key_here
-   OPENAI_API_KEY=your_openai_api_key_here
+
+   # OpenAI or AI Credits Platform
+   OPENAI_API_KEY=your_openai_or_credits_key_here
+   OPENAI_BASE_URL=https://api.openai.com/v1   # Or your AI credits relay URL (e.g. https://.../v1)
+
+   # Preferred Provider: 'auto', 'gemini', 'openai', or 'semantic_engine'
    LLM_PROVIDER=auto
    ```
 3. **Zero-Setup Offline Mode (0 Keys Required)**:
-   Leave API keys blank! QueryMind automatically falls back to its built-in deterministic Semantic Engine, which answers all queries with 100% precision without needing any external API keys or internet connection.
+   Leave API keys blank! QueryMind automatically falls back to its built-in deterministic Semantic Engine, answering queries with 100% precision without external APIs or internet connection.
 
-#### 2. Start the Server:
-
-Simply run the turnkey startup script:
-```bash
-./start.sh
-```
-
-Or run directly with Python:
+#### 4. Launch Application:
 ```bash
 python run.py
 ```
+Visit **`http://localhost:8000`**.
 
-Open **`http://localhost:8000`** in your browser to access the complete application!
+---
+
+### Option 3: Docker Deployment
+
+```bash
+git clone https://github.com/Gunjapalle-Suma-Bhavya/QueryMind.git
+cd QueryMind
+docker-compose up --build
+```
+Open **`http://localhost:8000`**.
 
 ---
 
