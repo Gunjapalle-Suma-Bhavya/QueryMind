@@ -1,0 +1,40 @@
+# ==========================================
+# QueryMind Git Ignore Rules
+# ==========================================
+
+# Secrets & Environment Files (CRITICAL: NEVER COMMIT API KEYS)
+.env
+.env.*
+!.env.example
+backend/.env
+env.config
+!env.config.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+backend/venv/
+backend/database/*.db
+backend/database/*.sqlite
+
+# Node
+node_modules/
+frontend/.vite/
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.log

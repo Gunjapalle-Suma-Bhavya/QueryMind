@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  querymind-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: querymind-server
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Optional: Provide Gemini or OpenAI API keys if external LLM generation is desired
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    restart: unless-stopped

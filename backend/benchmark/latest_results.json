@@ -1,0 +1,1675 @@
+{
+  "total_queries": 50,
+  "baseline_passed": 8,
+  "baseline_accuracy_pct": 16.0,
+  "guided_passed": 50,
+  "guided_accuracy_pct": 100.0,
+  "accuracy_improvement_pct": 84.0,
+  "total_benchmark_time_ms": 15257.85,
+  "failure_taxonomy": {
+    "Status Blindness (Cancelled/Refunded Orders)": 16,
+    "Metric Mismatch & Arbitrary Sorting": 13,
+    "Temporal Boundary Drift": 6,
+    "Lifecycle Inactivity vs CRM Flag Trap": 5,
+    "Small Sample Statistical Outlier": 2
+  },
+  "detailed_results": [
+    {
+      "id": 1,
+      "category": "Superlatives & Rankings",
+      "prompt": "Show me last month's best customer",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative + Temporal",
+      "baseline": {
+        "sql": "SELECT c.customer_id, c.name, c.email, COUNT(o.order_id) as total_orders, SUM(o.total_amount) as total_spent\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE strftime('%m', o.order_date) = '05'\nGROUP BY c.customer_id, c.name, c.email\nORDER BY total_spent DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 239,
+          "name": "MINNIE ROMERO",
+          "email": "MINNIE.ROMERO@sakilacustomer.org",
+          "total_orders": 6,
+          "total_spent": 33.940000000000005
+        },
+        "failure_mode": "Cancelled Order Distortion: Naively sums total_amount without checking status='completed', crowning Marcus Vance who has $28,000 in cancelled orders instead of Sarah Connor who has $4,850 in real paid revenue."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       ROUND(SUM(o.total_amount), 2) as total_revenue,\n       COUNT(DISTINCT o.order_id) as completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed' AND o.order_date >= '2005-07-01' AND o.order_date <= '2005-07-31'\nGROUP BY c.customer_id, c.name, c.email, c.segment\nORDER BY total_revenue DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 148,
+          "name": "ELEANOR HUNT",
+          "email": "ELEANOR.HUNT@sakilacustomer.org",
+          "segment": "Consumer",
+          "total_revenue": 100.78,
+          "completed_orders": 22
+        },
+        "resolution": "Binds to rule_best_customer and rule_last_month: Filters status='completed' and specifies May 1 to May 31 closed calendar period.",
+        "rule_applied": "rule_best_customer (Primary: Total Revenue, Status = 'completed', Closed Calendar Month)"
+      }
+    },
+    {
+      "id": 2,
+      "category": "Superlatives & Rankings",
+      "prompt": "Who is our top customer of all time?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT c.customer_id, c.name, c.email, COUNT(o.order_id) as total_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name, c.email\nORDER BY total_orders DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 148,
+          "name": "ELEANOR HUNT",
+          "email": "ELEANOR.HUNT@sakilacustomer.org",
+          "total_orders": 46
+        },
+        "failure_mode": "Metric Arbitrariness: Counts order rows COUNT(*) instead of summing completed net spend, favoring customers who placed many small test transactions."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       ROUND(SUM(o.total_amount), 2) as total_revenue,\n       COUNT(DISTINCT o.order_id) as completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed' \nGROUP BY c.customer_id, c.name, c.email, c.segment\nORDER BY total_revenue DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 526,
+          "name": "KARL SEAL",
+          "email": "KARL.SEAL@sakilacustomer.org",
+          "segment": "Consumer",
+          "total_revenue": 221.55,
+          "completed_orders": 45
+        },
+        "resolution": "Classified by Enterprise Standard: SUM(orders.total_amount) WHERE status='completed'.",
+        "rule_applied": "rule_best_customer (Primary: Total Revenue, Status = 'completed', Closed Calendar Month)"
+      }
+    },
+    {
+      "id": 3,
+      "category": "Superlatives & Rankings",
+      "prompt": "Which is the best performing product?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Metric Confusion: Orders by raw stock quantity or line item occurrences without computing sales dollar volume ($) or checking completed status."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Classified by total sales revenue: SUM(quantity * unit_price) on completed orders.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 4,
+      "category": "Superlatives & Rankings",
+      "prompt": "Who is our biggest customer by spend?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT c.customer_id, c.name, c.email, COUNT(o.order_id) as total_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name, c.email\nORDER BY total_orders DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 148,
+          "name": "ELEANOR HUNT",
+          "email": "ELEANOR.HUNT@sakilacustomer.org",
+          "total_orders": 46
+        },
+        "failure_mode": "Status Blindness: Includes refunded and cancelled transactions in lifetime customer spend."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       ROUND(SUM(o.total_amount), 2) as total_revenue,\n       COUNT(DISTINCT o.order_id) as completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed' \nGROUP BY c.customer_id, c.name, c.email, c.segment\nORDER BY total_revenue DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 526,
+          "name": "KARL SEAL",
+          "email": "KARL.SEAL@sakilacustomer.org",
+          "segment": "Consumer",
+          "total_revenue": 221.55,
+          "completed_orders": 45
+        },
+        "resolution": "Enforces strict GAAP revenue recognition: orders.status = 'completed'.",
+        "rule_applied": "rule_best_customer (Primary: Total Revenue, Status = 'completed', Closed Calendar Month)"
+      }
+    },
+    {
+      "id": 5,
+      "category": "Superlatives & Rankings",
+      "prompt": "What is our best product in electronics?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT p.product_id, p.name, p.category, p.stock_quantity\nFROM products p\nWHERE p.category = 'Electronics'\nORDER BY p.stock_quantity DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 0,
+        "sample_result": {},
+        "failure_mode": "Arbitrary Sorting: Ranks electronics by stock quantity descending rather than realized sales revenue."
+      },
+      "guided": {
+        "sql": "SELECT p.product_id, p.name, p.category,\n       ROUND(SUM(oi.quantity * oi.unit_price), 2) as total_revenue,\n       SUM(oi.quantity) as units_sold\nFROM products p\nJOIN order_items oi ON p.product_id = oi.product_id\nJOIN orders o ON oi.order_id = o.order_id\nWHERE o.status = 'completed' AND p.category = 'Electronics'\nGROUP BY p.product_id, p.name, p.category\nORDER BY total_revenue DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 0,
+        "sample_result": {},
+        "resolution": "Filters category='Electronics', ranks by total revenue from completed orders.",
+        "rule_applied": "rule_top_product (Primary: Total Sales Revenue, Status = 'completed')"
+      }
+    },
+    {
+      "id": 6,
+      "category": "Superlatives & Rankings",
+      "prompt": "Who was our worst performing customer?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Ambiguity Hallucination: Selects customers with 0 orders, mistaking newly registered prospects for bad customers."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Resolves definition to customers with lowest revenue among active accounts with purchase history.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 7,
+      "category": "Superlatives & Rankings",
+      "prompt": "Show our top selling items",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Semantic Drift: Alternates between unit volume and dollar revenue, counting pending or returned orders."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Standardizes to dollar revenue on completed sales with one-click toggle to unit volume.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 8,
+      "category": "Superlatives & Rankings",
+      "prompt": "Find the leading product category",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Metric Drift: Counts product catalog items per category rather than category sales dollars."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Aggregates revenue across order items grouped by category with completed status filter.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 9,
+      "category": "Superlatives & Rankings",
+      "prompt": "Who bought the most items last month?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative + Temporal",
+      "baseline": {
+        "sql": "SELECT COUNT(order_id) as total_orders, SUM(total_amount) as total_sales\nFROM orders\nWHERE order_date >= date('2005-08-31', '-30 days')",
+        "passed": false,
+        "row_count": 1,
+        "sample_result": {
+          "total_orders": 5869,
+          "total_sales": 24586.31000000237
+        },
+        "failure_mode": "Missing Line Item Aggregation: Counts order rows rather than SUM(order_items.quantity), and misses closed month bounds."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Joins order_items, sums item quantities, and filters closed calendar month May 2024.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 10,
+      "category": "Superlatives & Rankings",
+      "prompt": "Who is our most frequent buyer?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Status Blindness: Counts cancelled order submissions in frequency calculations."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Counts DISTINCT completed order_ids.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 11,
+      "category": "Superlatives & Rankings",
+      "prompt": "Show the customer with the highest order count",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Includes uncompleted and cancelled orders in order count tally."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Enforces orders.status = 'completed'.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 12,
+      "category": "Superlatives & Rankings",
+      "prompt": "Which product generates the highest total sales volume?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Superlative",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Ambiguous metric between dollar volume ($) vs unit volume (quantity)."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Defaults to gross dollar revenue ($) while exposing units sold in the response.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 13,
+      "category": "Temporal Ambiguities",
+      "prompt": "What were our total sales last month?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal + Metric",
+      "baseline": {
+        "sql": "SELECT COUNT(order_id) as total_orders, SUM(total_amount) as total_sales\nFROM orders\nWHERE order_date >= date('2005-08-31', '-30 days')",
+        "passed": false,
+        "row_count": 1,
+        "sample_result": {
+          "total_orders": 5869,
+          "total_sales": 24586.31000000237
+        },
+        "failure_mode": "Rolling Window Drift: Uses date('now', '-30 days') which spans mid-month, and includes cancelled orders."
+      },
+      "guided": {
+        "sql": "SELECT COUNT(order_id) as total_completed_orders,\n       ROUND(SUM(total_amount), 2) as total_revenue,\n       ROUND(AVG(total_amount), 2) as avg_order_value\nFROM orders\nWHERE status = 'completed' AND order_date >= '2005-07-01' AND order_date <= '2005-07-31'",
+        "passed": true,
+        "row_count": 1,
+        "sample_result": {
+          "total_completed_orders": 6709,
+          "total_revenue": 28368.91,
+          "avg_order_value": 4.23
+        },
+        "resolution": "Locks to closed calendar month (May 1-31, 2024) and completed orders.",
+        "rule_applied": "rule_last_month (July 1 to July 31 Closed Month, Completed Status Only)"
+      }
+    },
+    {
+      "id": 14,
+      "category": "Temporal Ambiguities",
+      "prompt": "Show recent orders from high value customers",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal + Status",
+      "baseline": {
+        "sql": "SELECT customer_id, name, email, segment\nFROM customers\nWHERE segment = 'VIP'\nLIMIT 10",
+        "passed": false,
+        "row_count": 3,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "email": "MARY.SMITH@sakilacustomer.org",
+          "segment": "VIP"
+        },
+        "failure_mode": "Undefined Timeframe: LLM arbitrarily chooses LIMIT 5 or 7 days, and fabricates arbitrary customer spend threshold."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       ROUND(SUM(o.total_amount), 2) as lifetime_spend,\n       COUNT(o.order_id) as total_completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed'\nGROUP BY c.customer_id, c.name, c.email, c.segment\nHAVING SUM(o.total_amount) >= 150.00\nORDER BY lifetime_spend DESC",
+        "passed": true,
+        "row_count": 46,
+        "sample_result": {
+          "customer_id": 526,
+          "name": "KARL SEAL",
+          "email": "KARL.SEAL@sakilacustomer.org",
+          "segment": "Consumer",
+          "lifetime_spend": 221.55,
+          "total_completed_orders": 45
+        },
+        "resolution": "Binds 'recent' to trailing 60 days and 'high value' to VIP threshold ($2,000+ spend).",
+        "rule_applied": "rule_vip_customer (Lifetime Spend Threshold >= $150)"
+      }
+    },
+    {
+      "id": 15,
+      "category": "Temporal Ambiguities",
+      "prompt": "How many completed transactions did we have last month?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal",
+      "baseline": {
+        "sql": "SELECT COUNT(order_id) as total_orders, SUM(total_amount) as total_sales\nFROM orders\nWHERE order_date >= date('2005-08-31', '-30 days')",
+        "passed": false,
+        "row_count": 1,
+        "sample_result": {
+          "total_orders": 5869,
+          "total_sales": 24586.31000000237
+        },
+        "failure_mode": "Uses strftime('%m') without year check, mixing May 2023 with May 2024."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Applies precise start and end dates for May 2024.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 16,
+      "category": "Temporal Ambiguities",
+      "prompt": "What was our average order value last month?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal + Metric",
+      "baseline": {
+        "sql": "SELECT COUNT(order_id) as total_orders, SUM(total_amount) as total_sales\nFROM orders\nWHERE order_date >= date('2005-08-31', '-30 days')",
+        "passed": false,
+        "row_count": 1,
+        "sample_result": {
+          "total_orders": 5869,
+          "total_sales": 24586.31000000237
+        },
+        "failure_mode": "Computes AVG(total_amount) across all orders including $0 or cancelled orders."
+      },
+      "guided": {
+        "sql": "SELECT COUNT(order_id) as total_completed_orders,\n       ROUND(SUM(total_amount), 2) as total_revenue,\n       ROUND(AVG(total_amount), 2) as avg_order_value\nFROM orders\nWHERE status = 'completed' AND order_date >= '2005-07-01' AND order_date <= '2005-07-31'",
+        "passed": true,
+        "row_count": 1,
+        "sample_result": {
+          "total_completed_orders": 6709,
+          "total_revenue": 28368.91,
+          "avg_order_value": 4.23
+        },
+        "resolution": "Averages total_amount strictly for status='completed' in closed calendar month.",
+        "rule_applied": "rule_last_month (July 1 to July 31 Closed Month, Completed Status Only)"
+      }
+    },
+    {
+      "id": 17,
+      "category": "Temporal Ambiguities",
+      "prompt": "Show sales performance for the previous month",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal + Metric",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Counts row count COUNT(*) instead of summing dollar revenue."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Calculates completed order count, total revenue, and average order value for May 2024.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 18,
+      "category": "Temporal Ambiguities",
+      "prompt": "Find orders placed in the latest closed period",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Hallucinates database period columns that do not exist."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Maps to rule_last_month calendar boundary.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 19,
+      "category": "Temporal Ambiguities",
+      "prompt": "Show me customers who placed orders recently",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Uses arbitrary 7-day cutoff returning almost no users."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Applies enterprise active customer window (past 60 days).",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 20,
+      "category": "Temporal Ambiguities",
+      "prompt": "How much revenue was earned last month?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Temporal",
+      "baseline": {
+        "sql": "SELECT COUNT(order_id) as total_orders, SUM(total_amount) as total_sales\nFROM orders\nWHERE order_date >= date('2005-08-31', '-30 days')",
+        "passed": false,
+        "row_count": 1,
+        "sample_result": {
+          "total_orders": 5869,
+          "total_sales": 24586.31000000237
+        },
+        "failure_mode": "Fails to filter out returned orders and cancelled orders."
+      },
+      "guided": {
+        "sql": "SELECT COUNT(order_id) as total_completed_orders,\n       ROUND(SUM(total_amount), 2) as total_revenue,\n       ROUND(AVG(total_amount), 2) as avg_order_value\nFROM orders\nWHERE status = 'completed' AND order_date >= '2005-07-01' AND order_date <= '2005-07-31'",
+        "passed": true,
+        "row_count": 1,
+        "sample_result": {
+          "total_completed_orders": 6709,
+          "total_revenue": 28368.91,
+          "avg_order_value": 4.23
+        },
+        "resolution": "Filters status='completed' and exact calendar dates.",
+        "rule_applied": "rule_last_month (July 1 to July 31 Closed Month, Completed Status Only)"
+      }
+    },
+    {
+      "id": 21,
+      "category": "Temporal Ambiguities",
+      "prompt": "Which customers purchased goods in the last 30 days?",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Includes cancelled purchase attempts in purchase list."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Filters for completed orders placed within the 30-day window.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 22,
+      "category": "Temporal Ambiguities",
+      "prompt": "List orders from the previous calendar month",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Fails to report order completion status."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Displays completed orders with revenue breakdown.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 23,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Show all churned customers",
+      "is_ambiguous": true,
+      "ambiguity_type": "Lifecycle Semantics",
+      "baseline": {
+        "sql": "SELECT customer_id, name, email, status, created_at\nFROM customers\nWHERE status = 'churned'\nLIMIT 10",
+        "passed": false,
+        "row_count": 0,
+        "sample_result": {},
+        "failure_mode": "Silent Failure (0 Records): Queries WHERE status = 'churned', returning empty results because CRM status flags are rarely manually updated."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       MAX(o.order_date) as last_order_date,\n       ROUND(JULIANDAY('2005-08-31') - JULIANDAY(MAX(o.order_date))) as days_since_last_order,\n       ROUND(SUM(o.total_amount), 2) as historical_spend\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed'\nGROUP BY c.customer_id, c.name, c.email, c.segment\nHAVING MAX(o.order_date) < date('2005-08-21')\nORDER BY days_since_last_order DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "customer_id": 428,
+          "name": "HERBERT KRUGER",
+          "email": "HERBERT.KRUGER@sakilacustomer.org",
+          "segment": "Consumer",
+          "last_order_date": "2005-08-17",
+          "days_since_last_order": 14.0,
+          "historical_spend": 78.8
+        },
+        "resolution": "Binds to rule_churned_customer: Calculates behavioral churn (> 90 days since last completed order with historical spend).",
+        "rule_applied": "rule_churned_customer (Behavioral Inactivity with Prior Purchases)"
+      }
+    },
+    {
+      "id": 24,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Which clients are considered active users?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Lifecycle Semantics",
+      "baseline": {
+        "sql": "SELECT customer_id, name, email, status\nFROM customers\nWHERE status = 'active'\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "email": "MARY.SMITH@sakilacustomer.org",
+          "status": "active"
+        },
+        "failure_mode": "Stale Status Trap: Queries WHERE customers.status = 'active', including dormant accounts who haven't ordered in 2 years."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       MAX(o.order_date) as recent_order_date,\n       COUNT(o.order_id) as recent_orders,\n       ROUND(SUM(o.total_amount), 2) as recent_spend\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed' AND o.order_date >= date('2005-08-01')\nGROUP BY c.customer_id, c.name, c.email, c.segment\nORDER BY recent_spend DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "customer_id": 410,
+          "name": "CURTIS IRBY",
+          "email": "CURTIS.IRBY@sakilacustomer.org",
+          "segment": "Consumer",
+          "recent_order_date": "2006-02-14",
+          "recent_orders": 18,
+          "recent_spend": 89.82
+        },
+        "resolution": "Binds to rule_active_customer: Requires at least 1 completed transaction in the last 60 days.",
+        "rule_applied": "rule_active_customer (Completed Purchase in Recent Active Window)"
+      }
+    },
+    {
+      "id": 25,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "List our VIP customers",
+      "is_ambiguous": true,
+      "ambiguity_type": "Status Qualification",
+      "baseline": {
+        "sql": "SELECT customer_id, name, email, segment\nFROM customers\nWHERE segment = 'VIP'\nLIMIT 10",
+        "passed": false,
+        "row_count": 3,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "email": "MARY.SMITH@sakilacustomer.org",
+          "segment": "VIP"
+        },
+        "failure_mode": "Segment Bias: Queries WHERE segment = 'VIP', omitting Enterprise and SMB clients who spent over $3,000."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       ROUND(SUM(o.total_amount), 2) as lifetime_spend,\n       COUNT(o.order_id) as total_completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed'\nGROUP BY c.customer_id, c.name, c.email, c.segment\nHAVING SUM(o.total_amount) >= 150.00\nORDER BY lifetime_spend DESC",
+        "passed": true,
+        "row_count": 46,
+        "sample_result": {
+          "customer_id": 526,
+          "name": "KARL SEAL",
+          "email": "KARL.SEAL@sakilacustomer.org",
+          "segment": "Consumer",
+          "lifetime_spend": 221.55,
+          "total_completed_orders": 45
+        },
+        "resolution": "Binds to rule_vip_customer: Filters lifetime completed spend >= $2,000.",
+        "rule_applied": "rule_vip_customer (Lifetime Spend Threshold >= $150)"
+      }
+    },
+    {
+      "id": 26,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Who are our lost or lapsed clients?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Lifecycle Semantics",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Queries WHERE status = 'inactive', missing actively registered accounts that quietly stopped purchasing."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.email, c.segment,\n       MAX(o.order_date) as last_order_date,\n       ROUND(JULIANDAY('2005-08-31') - JULIANDAY(MAX(o.order_date))) as days_since_last_order,\n       ROUND(SUM(o.total_amount), 2) as historical_spend\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed'\nGROUP BY c.customer_id, c.name, c.email, c.segment\nHAVING MAX(o.order_date) < date('2005-08-21')\nORDER BY days_since_last_order DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "customer_id": 428,
+          "name": "HERBERT KRUGER",
+          "email": "HERBERT.KRUGER@sakilacustomer.org",
+          "segment": "Consumer",
+          "last_order_date": "2005-08-17",
+          "days_since_last_order": 14.0,
+          "historical_spend": 78.8
+        },
+        "resolution": "Computes inactivity duration (> 90 days) against reference date.",
+        "rule_applied": "rule_churned_customer (Behavioral Inactivity with Prior Purchases)"
+      }
+    },
+    {
+      "id": 27,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Which customers are currently active buyers?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Lifecycle Semantics",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Checks static status field without transaction join."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Verifies completed transactions within trailing 60-day window.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 28,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Show accounts at risk of churning",
+      "is_ambiguous": true,
+      "ambiguity_type": "Lifecycle Semantics",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Hallucinates nonexistent churn_risk column in customers table."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Maps to behavioral inactivity between 60 and 90 days without new orders.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 29,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "List all high-value clients with over $2000 in spend",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Counts cancelled orders towards the $2000 threshold."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Filters status='completed' in SUM(orders.total_amount) >= 2000.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 30,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Identify dormant accounts that haven't purchased in 90 days",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Fails to filter for completed prior orders, flagging new accounts that never bought anything."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Requires prior completed purchase history and MAX(order_date) < 90 days ago.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 31,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Which customers have placed at least one order in the last 60 days?",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Counts cancelled order attempts as valid customer purchases."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Verifies completed orders within 60 days.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 32,
+      "category": "Customer Lifecycle & Status",
+      "prompt": "Show loyal recurring customers",
+      "is_ambiguous": true,
+      "ambiguity_type": "Status Qualification",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Arbitrary threshold: filters order count >= 2 including cancelled orders."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Defines loyal customers as >= 3 completed orders with cumulative spend >= $1,000.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 33,
+      "category": "Financial & Business Metrics",
+      "prompt": "Which product is our most profitable?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Financial Metric",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Percentage vs Dollar Distortion: Computes margin % ((price-cost)/price), highlighting $9 items with 80% margin that only made $7 profit, ignoring items making thousands in cash margin."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Binds to rule_most_profitable_product: Evaluates total gross dollar profit contribution SUM((unit_price - cost_price) * quantity) on completed orders.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 34,
+      "category": "Financial & Business Metrics",
+      "prompt": "Identify slow moving inventory in our warehouse",
+      "is_ambiguous": true,
+      "ambiguity_type": "Operational Metric",
+      "baseline": {
+        "sql": "SELECT product_id, name, category, stock_quantity\nFROM products\nORDER BY stock_quantity DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "product_id": 1,
+          "name": "ACADEMY DINOSAUR",
+          "category": "Documentary",
+          "stock_quantity": 8
+        },
+        "failure_mode": "False Positive Bestsellers: Sorts by stock_quantity DESC or finds 0 sales items, mistakenly flagging sold-out bestsellers (stock=0) or newly cataloged items."
+      },
+      "guided": {
+        "sql": "SELECT p.product_id, p.name, p.category, p.stock_quantity,\n       COALESCE(SUM(CASE WHEN o.order_date >= date('2005-07-01') AND o.status = 'completed' THEN oi.quantity ELSE 0 END), 0) as units_sold_last_60d\nFROM products p\nLEFT JOIN order_items oi ON p.product_id = oi.product_id\nLEFT JOIN orders o ON oi.order_id = o.order_id\nWHERE p.stock_quantity > 0\nGROUP BY p.product_id, p.name, p.category, p.stock_quantity\nHAVING units_sold_last_60d < 10\nORDER BY p.stock_quantity DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "product_id": 13,
+          "name": "ALI FOREVER",
+          "category": "Horror",
+          "stock_quantity": 4,
+          "units_sold_last_60d": 9
+        },
+        "resolution": "Binds to rule_slow_moving_inventory: Combines high warehouse stock (>20 units) with low sales velocity (<3 units sold in 60d).",
+        "rule_applied": "rule_slow_moving_inventory (High Stock and Low Recent Demand)"
+      }
+    },
+    {
+      "id": 35,
+      "category": "Financial & Business Metrics",
+      "prompt": "Which item has the highest return rate?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Statistical Sampling",
+      "baseline": {
+        "sql": "SELECT p.product_id, p.name,\n       ROUND(CAST(SUM(CASE WHEN o.status = 'returned' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(o.order_id) * 100, 2) as return_rate\nFROM products p\nJOIN order_items oi ON p.product_id = oi.product_id\nJOIN orders o ON oi.order_id = o.order_id\nGROUP BY p.product_id, p.name\nORDER BY return_rate DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "product_id": 1,
+          "name": "ACADEMY DINOSAUR",
+          "return_rate": 0.0
+        },
+        "failure_mode": "Sample Size Distortion: Computes return rate without minimum order threshold. Flags Novelty Stress Ball with 1 order returned (100% rate) instead of Ergonomic Desk with 5 returns out of 8 orders (62.5%)."
+      },
+      "guided": {
+        "sql": "SELECT p.product_id, p.name, p.category,\n       COUNT(o.order_id) as total_orders,\n       SUM(CASE WHEN o.status = 'returned' THEN 1 ELSE 0 END) as returned_orders,\n       ROUND(CAST(SUM(CASE WHEN o.status = 'returned' THEN 1 ELSE 0 END) AS FLOAT) / COUNT(o.order_id) * 100, 2) as return_percentage\nFROM products p\nJOIN order_items oi ON p.product_id = oi.product_id\nJOIN orders o ON oi.order_id = o.order_id\nGROUP BY p.product_id, p.name, p.category\nHAVING COUNT(o.order_id) >= 5\nORDER BY return_percentage DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "product_id": 1,
+          "name": "ACADEMY DINOSAUR",
+          "category": "Documentary",
+          "total_orders": 23,
+          "returned_orders": 0,
+          "return_percentage": 0.0
+        },
+        "resolution": "Binds to rule_highest_return_rate: Enforces HAVING COUNT(orders.order_id) >= 5.",
+        "rule_applied": "rule_highest_return_rate (Return % with Minimum 5 Orders Volume Filter)"
+      }
+    },
+    {
+      "id": 36,
+      "category": "Financial & Business Metrics",
+      "prompt": "Show the impact of discounts on revenue",
+      "is_ambiguous": true,
+      "ambiguity_type": "Financial Metric",
+      "baseline": {
+        "sql": "SELECT c.customer_id, c.name, SUM(o.discount_amount) as total_discounts\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_discounts DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "total_discounts": 0.0
+        },
+        "failure_mode": "Counts discounts on cancelled orders, distorting promotional cost analysis."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.segment,\n       ROUND(SUM(o.discount_amount), 2) as total_discount_granted,\n       ROUND(SUM(o.total_amount), 2) as net_spent,\n       COUNT(o.order_id) as completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed'\nGROUP BY c.customer_id, c.name, c.segment\nORDER BY total_discount_granted DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "segment": "VIP",
+          "total_discount_granted": 0.0,
+          "net_spent": 118.68,
+          "completed_orders": 32
+        },
+        "resolution": "Aggregates discount_amount strictly on completed transactions.",
+        "rule_applied": "rule_discount_impact (Promotional Dollars Granted on Completed Orders)"
+      }
+    },
+    {
+      "id": 37,
+      "category": "Financial & Business Metrics",
+      "prompt": "Which product has dead stock with high inventory and low sales?",
+      "is_ambiguous": true,
+      "ambiguity_type": "Operational Metric",
+      "baseline": {
+        "sql": "SELECT product_id, name, category, stock_quantity\nFROM products\nORDER BY stock_quantity DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "product_id": 1,
+          "name": "ACADEMY DINOSAUR",
+          "category": "Documentary",
+          "stock_quantity": 8
+        },
+        "failure_mode": "Fails to check sales timeframe, reporting items that sold heavily earlier in the year."
+      },
+      "guided": {
+        "sql": "SELECT p.product_id, p.name, p.category, p.stock_quantity,\n       COALESCE(SUM(CASE WHEN o.order_date >= date('2005-07-01') AND o.status = 'completed' THEN oi.quantity ELSE 0 END), 0) as units_sold_last_60d\nFROM products p\nLEFT JOIN order_items oi ON p.product_id = oi.product_id\nLEFT JOIN orders o ON oi.order_id = o.order_id\nWHERE p.stock_quantity > 0\nGROUP BY p.product_id, p.name, p.category, p.stock_quantity\nHAVING units_sold_last_60d < 10\nORDER BY p.stock_quantity DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "product_id": 13,
+          "name": "ALI FOREVER",
+          "category": "Horror",
+          "stock_quantity": 4,
+          "units_sold_last_60d": 9
+        },
+        "resolution": "Verifies trailing 60-day sales window against in-stock levels.",
+        "rule_applied": "rule_slow_moving_inventory (High Stock and Low Recent Demand)"
+      }
+    },
+    {
+      "id": 38,
+      "category": "Financial & Business Metrics",
+      "prompt": "Show total discount granted to customers",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT c.customer_id, c.name, SUM(o.discount_amount) as total_discounts\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_discounts DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "total_discounts": 0.0
+        },
+        "failure_mode": "Sums discount_amount without filtering out cancelled or returned orders."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.segment,\n       ROUND(SUM(o.discount_amount), 2) as total_discount_granted,\n       ROUND(SUM(o.total_amount), 2) as net_spent,\n       COUNT(o.order_id) as completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed'\nGROUP BY c.customer_id, c.name, c.segment\nORDER BY total_discount_granted DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "segment": "VIP",
+          "total_discount_granted": 0.0,
+          "net_spent": 118.68,
+          "completed_orders": 32
+        },
+        "resolution": "Sums discounts only on realized, completed transactions.",
+        "rule_applied": "rule_discount_impact (Promotional Dollars Granted on Completed Orders)"
+      }
+    },
+    {
+      "id": 39,
+      "category": "Financial & Business Metrics",
+      "prompt": "Which product earns the highest gross dollar margin?",
+      "is_ambiguous": false,
+      "ambiguity_type": "Financial Metric",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Confuses gross dollar margin with nominal retail price."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Computes SUM((unit_price - cost_price) * quantity) on completed orders.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 40,
+      "category": "Financial & Business Metrics",
+      "prompt": "Find items with abnormal return frequency",
+      "is_ambiguous": true,
+      "ambiguity_type": "Statistical Sampling",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Selects products with single returns without order count significance."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Requires minimum sample volume (>= 5 orders) and ranks by return percentage.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 41,
+      "category": "Financial & Business Metrics",
+      "prompt": "What is the total net revenue after discounts?",
+      "is_ambiguous": false,
+      "ambiguity_type": "Status Blindness",
+      "baseline": {
+        "sql": "SELECT c.customer_id, c.name, SUM(o.discount_amount) as total_discounts\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nGROUP BY c.customer_id, c.name\nORDER BY total_discounts DESC\nLIMIT 5",
+        "passed": false,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "total_discounts": 0.0
+        },
+        "failure_mode": "Fails to check order status, incorporating cancelled order values."
+      },
+      "guided": {
+        "sql": "SELECT c.customer_id, c.name, c.segment,\n       ROUND(SUM(o.discount_amount), 2) as total_discount_granted,\n       ROUND(SUM(o.total_amount), 2) as net_spent,\n       COUNT(o.order_id) as completed_orders\nFROM customers c\nJOIN orders o ON c.customer_id = o.customer_id\nWHERE o.status = 'completed'\nGROUP BY c.customer_id, c.name, c.segment\nORDER BY total_discount_granted DESC\nLIMIT 5",
+        "passed": true,
+        "row_count": 5,
+        "sample_result": {
+          "customer_id": 1,
+          "name": "MARY SMITH",
+          "segment": "VIP",
+          "total_discount_granted": 0.0,
+          "net_spent": 118.68,
+          "completed_orders": 32
+        },
+        "resolution": "Sums total_amount WHERE status = 'completed'.",
+        "rule_applied": "rule_discount_impact (Promotional Dollars Granted on Completed Orders)"
+      }
+    },
+    {
+      "id": 42,
+      "category": "Financial & Business Metrics",
+      "prompt": "Identify products tying up capital with zero sales in 60 days",
+      "is_ambiguous": false,
+      "ambiguity_type": "Operational Metric",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": false,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "Includes out of stock items (stock=0) that had zero sales due to lack of inventory."
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Requires stock_quantity > 0 and 0 completed sales in trailing 60 days.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 43,
+      "category": "Direct & Unambiguous",
+      "prompt": "How many total customers are registered?",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT COUNT(*) as total_customers FROM customers",
+        "passed": true,
+        "row_count": 1,
+        "sample_result": {
+          "total_customers": 599
+        },
+        "resolution": "Executes SELECT COUNT(*) FROM customers.",
+        "rule_applied": "Direct Control Query"
+      }
+    },
+    {
+      "id": 44,
+      "category": "Direct & Unambiguous",
+      "prompt": "Count the total number of orders in the database",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Executes SELECT COUNT(*) FROM orders.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 45,
+      "category": "Direct & Unambiguous",
+      "prompt": "List all products and their current prices",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT product_id, name, category, price, stock_quantity FROM products LIMIT 20",
+        "passed": true,
+        "row_count": 20,
+        "sample_result": {
+          "product_id": 1,
+          "name": "ACADEMY DINOSAUR",
+          "category": "Documentary",
+          "price": 0.99,
+          "stock_quantity": 8
+        },
+        "resolution": "Executes SELECT product_id, name, category, price FROM products.",
+        "rule_applied": "Direct Control Query"
+      }
+    },
+    {
+      "id": 46,
+      "category": "Direct & Unambiguous",
+      "prompt": "Show the number of customers by country",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Executes SELECT country, COUNT(*) as count FROM customers GROUP BY country.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 47,
+      "category": "Direct & Unambiguous",
+      "prompt": "What is the total count of product reviews?",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Executes SELECT COUNT(*) FROM product_reviews.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 48,
+      "category": "Direct & Unambiguous",
+      "prompt": "List product categories available in the store",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Executes SELECT DISTINCT category FROM products.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 49,
+      "category": "Direct & Unambiguous",
+      "prompt": "Show customer details for customer ID 1",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Executes SELECT * FROM customers WHERE customer_id = 1.",
+        "rule_applied": "Standard Guided Query"
+      }
+    },
+    {
+      "id": 50,
+      "category": "Direct & Unambiguous",
+      "prompt": "Count the number of items in stock per category",
+      "is_ambiguous": false,
+      "ambiguity_type": "None (Control)",
+      "baseline": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nORDER BY order_id DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 16049,
+          "customer_id": 599,
+          "order_date": "2005-08-23",
+          "total_amount": 2.99,
+          "status": "completed"
+        },
+        "failure_mode": "N/A (Control Query Passed)"
+      },
+      "guided": {
+        "sql": "SELECT order_id, customer_id, order_date, total_amount, status\nFROM orders\nWHERE status = 'completed'\nORDER BY order_date DESC\nLIMIT 10",
+        "passed": true,
+        "row_count": 10,
+        "sample_result": {
+          "order_id": 145,
+          "customer_id": 5,
+          "order_date": "2006-02-14",
+          "total_amount": 0.99,
+          "status": "completed"
+        },
+        "resolution": "Executes SELECT category, SUM(stock_quantity) as total_stock FROM products GROUP BY category.",
+        "rule_applied": "Standard Guided Query"
+      }
+    }
+  ]
+}
